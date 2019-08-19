@@ -187,7 +187,7 @@ INTEGER, ALLOCATABLE :: counter(:,:), grdpnts(:,:)
 REAL                 :: size_frac
 !INITIALIZE some values
 namelist /INPUTgeneral/ dsize_x, dsize_y, dt, res
-namelist /INPUTtracer/ nTrSet, ntset, max_age, rad, lformat
+namelist /INPUTtracer/ nTrSet, max_age, rad, lformat
 namelist /INPUTIO/ odir
 open(100,file='job/namelist.dat')
 read(100,nml=INPUTgeneral)
@@ -722,7 +722,7 @@ END SUBROUTINE maxcell
 !                      rmax,cpio,max_tracers,tracpo,count_tracer)
 SUBROUTINE initCircle(max_no_of_cells,ts,traced, COMx,COMy, &
                       rmax,cpio,tracpo,count_tracer,active_CP,already_tracked)
-   USE cp_parameters, ONLY : dsize_x, dsize_y,max_tracer_CP, nTrSet, ntset
+   USE cp_parameters, ONLY : dsize_x, dsize_y,max_tracer_CP, nTrSet
   
   INTEGER, INTENT(IN)       :: max_no_of_cells, ts
 !  INTEGER, INTENT(IN)       :: IDstart(max_no_of_cells)
@@ -741,7 +741,7 @@ SUBROUTINE initCircle(max_no_of_cells,ts,traced, COMx,COMy, &
 
    if (cpio(i,2) .ne. 0 ) then ! avoid splitting events 
 !   if (IDstart(i) == ts) then ! set new circle when precip begins
-   if (ts .ge. cpio(i,3) .and. ts .le. cpio(i,3)+ntset) then ! set new circle when precip begins
+   if (ts .eq. cpio(i,3) ) then ! set new circle when precip begins
      !reff = sqrt(area(i))/pi 
      active_CP(i) = 1
      already_tracked(i) =(ts-cpio(i,3)+1) * nTrSet             
@@ -800,7 +800,7 @@ INTEGER, INTENT(IN)       :: cpio(max_no_of_cells,3)
 INTEGER, INTENT(INOUT)    :: tracpo(2,max_tracers)
 INTEGER, INTENT(INOUT)    :: CPinfo(max_no_of_cells,4)
 REAL :: randy
-INTEGER :: setn,plus,i,j,ii,cc
+INTEGER :: i,j,ii,cc
   DO i = 1,max_no_of_cells,1 
     IF (cpio(i,2) .ne. 0 ) then  ! no splittig event
       cc = min(counter(i,1),nTrSet) !number of ttracers to set vs number of
@@ -808,7 +808,6 @@ INTEGER :: setn,plus,i,j,ii,cc
       IF (cpio(i,3) .eq. ts) then  ! in timerange of setting 
         already_tracked(i) = nTrSet ! number of tracer which will have been set after this routine
         IF (counter(i,1) .gt. 0) then  ! if prec outlines where found
-!write(*,*) 'prec outlines found'
           active_CP(i) = 1
           ! set tracer at center of all outer gridpints
           count_tracer = count_tracer +cc
@@ -817,7 +816,6 @@ INTEGER :: setn,plus,i,j,ii,cc
           traced(i,1:cc,3) = CPsets(i,1:cc,1,1) !xpos
           traced(i,1:cc,4) = CPsets(i,1:cc,2,1) !ypos
           IF (counter(i,1) .lt. nTrSet) then ! less outline points than tracers shell be placed
-!write(*,*) 'too few outlins'
             DO ii=cc+1,nTrSet
               count_tracer = count_tracer+1
               CALL RANDOM_NUMBER(randy)
@@ -831,14 +829,11 @@ INTEGER :: setn,plus,i,j,ii,cc
         END IF
         traced(i,1:nTrSet,11) = 1
         traced(i,1:nTrSet,6) = ts
-        traced(i,1:nTrSet,(/7,18/)) =setn ! age, setn
-        CPinfo(i,1) = setn
+        traced(i,1:nTrSet,(/7,18/)) =0 ! age, setn
+        CPinfo(i,1) = 0 
         traced(i,1:nTrSet,9) = cpio(i,1)
         traced(i,1:nTrSet,10) = (/(j, j =count_tracer+1-nTrSet,count_tracer )/)
         traced(i,1:nTrSet,12) = cpio(i,2)
-        !tracpo(1,already_tracked(i)+1-nTrSet:count_tracer) = i
-        !tracpo(2,already_tracked(i)+1-nTrSet:count_tracer) = (/(j, j=1+plus,plus+nTrSet )/)
-write(*,*) count_tracer , nTrSet
         tracpo(1,count_tracer+1-nTrSet:count_tracer) = i
         tracpo(2,count_tracer+1-nTrSet:count_tracer) = (/(j, j =1,nTrSet )/)
       END IF !timestep within the timerange when tracers shell be set for thisCP
