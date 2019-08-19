@@ -170,7 +170,6 @@ INTEGER              :: ierr                     ! error index for reading files
 REAL                 :: xCOG, yCOG               ! buffer variable for read COGs
 INTEGER              :: onset,begin              ! first cell reaches treshold, beginning of tracking
 INTEGER              :: max_no_of_cells          ! maximum number if CPs (can be retrieved from the number of rain cells
-!INTEGER              :: max_tracer_CP            ! max no of tracers per CP
 INTEGER              :: max_tracers              ! max no of commulative tracers 
 INTEGER,ALLOCATABLE  :: tracpo(:,:)              ! keeps track of first two indices in traced (CP ID, internal tracer ID) for every tracer 
 INTEGER              :: srv_header_input(8)
@@ -188,7 +187,7 @@ INTEGER, ALLOCATABLE :: counter(:,:), grdpnts(:,:)
 REAL                 :: size_frac
 !INITIALIZE some values
 namelist /INPUTgeneral/ dsize_x, dsize_y, dt, res
-namelist /INPUTtracer/ max_tracer_CP, nTrSet, ntset, max_age, rad, lformat
+namelist /INPUTtracer/ nTrSet, ntset, max_age, rad, lformat
 namelist /INPUTIO/ odir
 open(100,file='job/namelist.dat')
 read(100,nml=INPUTgeneral)
@@ -200,15 +199,14 @@ read(100,nml=INPUTtracer)
 !CALL getarg(max_no_of_cells)
 OPEN(1111,FILE=trim(odir) // '/input/cp/na.txt')
 READ(1111,*) max_no_of_cells
-!max_tracer_CP = nTrSet * ntset
-max_tracers = max_no_of_cells*max_tracer_CP
+max_tracers = max_no_of_cells*nTrSet
 write(*,*) "max_tracers", max_tracers, "max_no_of_cells", max_no_of_cells, "max_tracer_CP", max_tracer_CP 
 ! allocate fields
 ALLOCATE(cpio(max_no_of_cells,3))
-ALLOCATE(traced(max_no_of_cells,max_tracer_CP,20))
+ALLOCATE(traced(max_no_of_cells,nTrSet,20))
 ALLOCATE(traced_dummy(max_tracer_CP,20))
-ALLOCATE(traced_prev1(max_no_of_cells,max_tracer_CP,20))
-ALLOCATE(traced_prev2(max_no_of_cells,max_tracer_CP,20))
+ALLOCATE(traced_prev1(max_no_of_cells,nTrSet,20))
+ALLOCATE(traced_prev2(max_no_of_cells,nTrSet,20))
 !ALLOCATE(IDstart(max_no_of_cells))
 ALLOCATE(COMx(max_no_of_cells))
 ALLOCATE(COMy(max_no_of_cells))
@@ -364,12 +362,12 @@ prec_active(:,1) = 0
 
        !CALL neigh(track_numbers,nneighb)
        !CALL set_tracer(nneighb, track_numbers,max_no_of_cells, timestep,traced,&
-       !            count_tracer,already_tracked,tracpo,max_tracers,cpio(:,1:2))
+       !            count_tracer,already_tracked,tracpo,nTrSet,cpio(:,1:2))
        ! alternative to set tracers at edges of precip, set tracer at circle
        ! around precip
        !CALL maxcell(track_numbers,COMx,COMy,rmax,max_no_of_cells)
        !CALL initCircle(max_no_of_cells,timestep,traced, COMx,COMy,&
-       !                rmax,cpio,max_tracers,tracpo,count_tracer,active_CP,already_tracked)
+       !                rmax,cpio,tracpo,count_tracer,active_CP,already_tracked)
        CALL velocity_interpol(vel(:,:,1),vel(:,:,2),timestep,traced, count_tracer, &
                           max_no_of_cells,tracpo,max_tracers)
        CALL geometry(traced,COMx,COMy,already_tracked,max_no_of_cells)
@@ -464,16 +462,16 @@ prec_active(:,1) = 0
       CAll WRITEMAP(map(:,:,1),timestep,trim(odir) // '/output/cp/object')
       CAll WRITEMAP(map(:,:,2),timestep,trim(odir) // '/output/cp/tracer')
 
-       !CALL time_dev(traced,traced_prev,max_no_of_cells,max_tracer_CP,count_tracer,tracpo,max_tracers)
+       !CALL time_dev(traced,traced_prev,max_no_of_cells,max_tracer_CP,count_tracer,tracpo,nTrSet)
 !       if (timestep .ge. onset) then 
-!       CALL write_output(traced,max_tracers,count_tracer,timestep,tracpo,&
+!       CALL write_output(traced,nTrSet,count_tracer,timestep,tracpo,&
 !                         max_no_of_cells,COMx,COMy,traced_prev1,CPsize)
 !       end if
         traced_prev2 = traced_prev1
         traced_prev1 = traced
 
   !     if rad then
-  !       CALL radial_update(timestep,traced,count_tracer,max_no_of_cells,tracpo,max_tracers) 
+  !       CALL radial_update(timestep,traced,count_tracer,max_no_of_cells,tracpo,nTrSet) 
   !     else
          CALL update_tracer(vel(:,:,1),vel(:,:,2),timestep,traced, count_tracer, &
                           max_no_of_cells,tracpo,max_tracers,CPinfo)
@@ -723,17 +721,17 @@ END SUBROUTINE maxcell
 !SUBROUTINE initCircle(max_no_of_cells,ts,IDstart,traced, COMx,COMy, &
 !                      rmax,cpio,max_tracers,tracpo,count_tracer)
 SUBROUTINE initCircle(max_no_of_cells,ts,traced, COMx,COMy, &
-                      rmax,cpio,max_tracers,tracpo,count_tracer,active_CP,already_tracked)
+                      rmax,cpio,tracpo,count_tracer,active_CP,already_tracked)
    USE cp_parameters, ONLY : dsize_x, dsize_y,max_tracer_CP, nTrSet, ntset
   
-  INTEGER, INTENT(IN)       :: max_no_of_cells, max_tracers, ts
+  INTEGER, INTENT(IN)       :: max_no_of_cells, ts
 !  INTEGER, INTENT(IN)       :: IDstart(max_no_of_cells)
   REAL, INTENT(IN)          :: rmax(max_no_of_cells),&
                                COMx(max_no_of_cells), COMy(max_no_of_cells)
   INTEGER, INTENT(INOUT) ::already_tracked(max_no_of_cells)
   INTEGER, INTENT(IN)       :: cpio(max_no_of_cells,3)
   INTEGER, INTENT(INOUT)    :: count_tracer, active_CP(max_no_of_cells)
-  INTEGER, INTENT(INOUT)    :: tracpo(2,max_tracers)
+  INTEGER, INTENT(INOUT)    :: tracpo(2, nTrSet)
   REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
   REAL                      :: pi, inc !, reff 
   INTEGER                   :: i, j, pj
@@ -790,13 +788,13 @@ END SUBROUTINE
 !-----------------------------------------------------------------------------------
 SUBROUTINE set_tracer2(max_no_of_cells,cpio,traced,count_tracer,counter,&
                        CPsets,ts,active_CP,tracpo,max_tracers,already_tracked,CPinfo)
-USE cp_parameters, ONLY: nTrSet, max_tracer_CP
+USE cp_parameters, ONLY: nTrSet
 
-INTEGER, INTENT(IN) :: max_no_of_cells, ts,max_tracers
+INTEGER, INTENT(IN) :: max_no_of_cells, ts, max_tracers
 INTEGER, INTENT(IN) :: CPsets(max_no_of_cells,nTrSet,2,2)
 INTEGER, INTENT(IN) :: counter(max_no_of_cells,2)
 INTEGER, INTENT(INOUT) :: already_tracked(max_no_of_cells)
-REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
 INTEGER, INTENT(INOUT)    :: count_tracer, active_CP(max_no_of_cells)
 INTEGER, INTENT(IN)       :: cpio(max_no_of_cells,3)
 INTEGER, INTENT(INOUT)    :: tracpo(2,max_tracers)
@@ -805,81 +803,44 @@ REAL :: randy
 INTEGER :: setn,plus,i,j,ii,cc
   DO i = 1,max_no_of_cells,1 
     IF (cpio(i,2) .ne. 0 ) then  ! no splittig event
-      setn = ts-cpio(i,3) 
-      plus = setn*nTrSet 
-      cc = min(counter(i,1),nTrSet)
-      IF (setn .ge. 0 .and. setn .le. ntset) then  ! in timerange of setting 
-        already_tracked(i) = nTrSet * (setn+1) ! number of tracer which will have been set after this routine
+      cc = min(counter(i,1),nTrSet) !number of ttracers to set vs number of
+!outline gridcells
+      IF (cpio(i,3) .eq. ts) then  ! in timerange of setting 
+        already_tracked(i) = nTrSet ! number of tracer which will have been set after this routine
         IF (counter(i,1) .gt. 0) then  ! if prec outlines where found
 !write(*,*) 'prec outlines found'
           active_CP(i) = 1
           ! set tracer at center of all outer gridpints
           count_tracer = count_tracer +cc
-          traced(i,1+plus:cc+plus,1) = CPsets(i,1:cc,1,1) ! xpos
-          traced(i,1+plus:cc+plus,2) = CPsets(i,1:cc,2,1) ! ypos
-          traced(i,1+plus:cc+plus,3) = CPsets(i,1:cc,1,1) !xpos
-          traced(i,1+plus:cc+plus,4) = CPsets(i,1:cc,2,1) !ypos
+          traced(i,1:cc,1) = CPsets(i,1:cc,1,1) ! xpos
+          traced(i,1:cc,2) = CPsets(i,1:cc,2,1) ! ypos
+          traced(i,1:cc,3) = CPsets(i,1:cc,1,1) !xpos
+          traced(i,1:cc,4) = CPsets(i,1:cc,2,1) !ypos
           IF (counter(i,1) .lt. nTrSet) then ! less outline points than tracers shell be placed
 !write(*,*) 'too few outlins'
             DO ii=cc+1,nTrSet
               count_tracer = count_tracer+1
               CALL RANDOM_NUMBER(randy)
-              traced(i,ii+plus,1) = CPsets(i,mod(ii,cc)+1,1,1) + randy
+              traced(i,ii,1) = CPsets(i,mod(ii,cc)+1,1,1) + randy
               CALL RANDOM_NUMBER(randy)
-              traced(i,ii+plus,2) = CPsets(i,mod(ii,cc)+1,2,1) + randy
-              traced(i,ii+plus,3) = CPsets(i,mod(ii,cc)+1,1,1)
-              traced(i,ii+plus,4) = CPsets(i,mod(ii,cc)+1,2,1)
+              traced(i,ii,2) = CPsets(i,mod(ii,cc)+1,2,1) + randy
+              traced(i,ii,3) = CPsets(i,mod(ii,cc)+1,1,1)
+              traced(i,ii,4) = CPsets(i,mod(ii,cc)+1,2,1)
             END DO
           END IF ! setting additional tracers 
-        ELSE   ! if precip does not exists, set tracer inbetween
-!write(*,*) 'prec has stoped', plus
-          if (plus .gt. 0) then ! if tracer exists 
-!write(*,*) plus, 'there must be tracres alreadz'
-!            write(*,*) 'precip has stoped'
-            count_tracer = count_tracer + nTrSet
-            traced(i,1+plus:plus+nTrSet,1) = traced(i,1:nTrSet,1) ! xpos
-            traced(i,1+plus:plus+nTrSet,2) = traced(i,1:nTrSet,2) ! xpos
-            traced(i,1+plus:plus+nTrSet,3) = traced(i,1:nTrSet,3) ! xpos
-            traced(i,1+plus:plus+nTrSet,4) = traced(i,1:nTrSet,4) ! xpos
-          else ! set on previous field
-!write(*,*) 'tracers placed at precious precip'
-            cc = min(counter(i,2),nTrSet)
-
-            IF (counter(i,2) .gt. 0) then
-              active_CP(i) = 1
-              count_tracer = count_tracer +cc
-              traced(i,1+plus:plus+cc,1) = CPsets(i,1:cc,1,2) !xpos
-              traced(i,1+plus:plus+cc,2) = CPsets(i,1:cc,2,2) !xpos
-              traced(i,1+plus:plus+cc,3) = CPsets(i,1:cc,1,2) !xpos
-              traced(i,1+plus:plus+cc,4) = CPsets(i,1:cc,2,2) !xpos
-              IF (counter(i,2) .lt. nTrSet) then
-                DO ii=cc+1,nTrSet
-                  count_tracer = count_tracer+1
-                  CALL RANDOM_NUMBER(randy)
-                  traced(i,ii+plus,1) = CPsets(i,mod(ii,cc)+1,1,1) + randy
-                  CALL RANDOM_NUMBER(randy)
-                  traced(i,ii+plus,2) = CPsets(i,mod(ii,cc)+1,2,1) + randy
-                  traced(i,ii+plus,3) = CPsets(i,mod(ii,cc)+1,1,1)
-                  traced(i,ii+plus,4) = CPsets(i,mod(ii,cc)+1,2,1)
-                END DO
-              END IF
-          END IF
-
-          end if
-   
         END IF
-        traced(i,1+plus:plus+nTrSet,11) = 1
-        traced(i,1+plus:plus+nTrSet,6) = ts
-        traced(i,1+plus:plus+nTrSet,(/7,18/)) =setn ! age, setn
+        traced(i,1:nTrSet,11) = 1
+        traced(i,1:nTrSet,6) = ts
+        traced(i,1:nTrSet,(/7,18/)) =setn ! age, setn
         CPinfo(i,1) = setn
-        traced(i,1+plus:nTrSet+plus,9) = cpio(i,1)
-        traced(i,1+plus:plus+nTrSet,10) = (/(j, j =count_tracer+1-nTrSet,count_tracer )/)
-        traced(i,1+plus:plus+nTrSet,12) = cpio(i,2)
+        traced(i,1:nTrSet,9) = cpio(i,1)
+        traced(i,1:nTrSet,10) = (/(j, j =count_tracer+1-nTrSet,count_tracer )/)
+        traced(i,1:nTrSet,12) = cpio(i,2)
         !tracpo(1,already_tracked(i)+1-nTrSet:count_tracer) = i
         !tracpo(2,already_tracked(i)+1-nTrSet:count_tracer) = (/(j, j=1+plus,plus+nTrSet )/)
 write(*,*) count_tracer , nTrSet
         tracpo(1,count_tracer+1-nTrSet:count_tracer) = i
-        tracpo(2,count_tracer+1-nTrSet:count_tracer) = (/(j, j =1+plus,plus+nTrSet )/)
+        tracpo(2,count_tracer+1-nTrSet:count_tracer) = (/(j, j =1,nTrSet )/)
       END IF !timestep within the timerange when tracers shell be set for thisCP
     END IF  ! precip event is no splitting
 !  if (i .eq. 72 .and. timestep .gt. 155 .and. timestep .lt. 158) write(*,*) traced(i,1:tracpo(2,count_tracer),1:2)
@@ -892,22 +853,21 @@ END SUBROUTINE set_tracer2
 SUBROUTINE set_tracer(nneighb,track_numbers, max_no_of_cells,&
                       timestep,traced,count_tracer,&
                       already_tracked,tracpo,max_tracers,cpio)
-USE cp_parameters, ONLY : dsize_x, dsize_y,max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y,nTrSet
   INTEGER, INTENT(INOUT)    :: nneighb(dsize_x,dsize_y)
   REAL, INTENT(IN)          :: track_numbers(dsize_x,dsize_y)
   INTEGER, INTENT(IN)       :: cpio(1700,2)
   INTEGER, INTENT(IN)       :: timestep
   INTEGER, INTENT(IN)       :: max_no_of_cells, max_tracers
-!  INTEGER, INTENT(IN)       :: max_tracer_CP
   INTEGER, INTENT(INOUT)    :: tracpo(2,max_tracers)
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
   INTEGER, INTENT(INOUT)    :: count_tracer
   INTEGER                   :: ix, iy
   INTEGER, INTENT(INOUT)    :: already_tracked(max_no_of_cells)
   DO iy=1, dsize_y
     DO ix=1, dsize_x
       IF (nneighb(ix,iy) .EQ. 1 ) THEN ! precip edge found
-        IF (already_tracked(INT(track_numbers(ix,iy))) .LT. max_tracer_CP) THEN ! upper bound of tracer no
+        IF (already_tracked(INT(track_numbers(ix,iy))) .LT. nTrSet) THEN ! upper bound of tracer no
           IF (traced(INT(track_numbers(ix,iy)),1,7) .lt.1 )  THEN ! set tracer only when CP has not been tracked yet
             if  (cpio(INT(track_numbers(ix,iy)),2) .ne. 0 ) then ! avoid splitting events 
               ! ---- set tracer at gp center ----
@@ -971,15 +931,15 @@ END SUBROUTINE set_tracer
 ! interpolates wind field
 !-----------------------------------------------------------------------------------
 SUBROUTINE velocity_interpol(velx,vely,timestep,traced, count_tracer,max_no_of_cells,tracpo,max_tracers)
-USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y, nTrSet
 
   INTEGER, INTENT(IN)       :: timestep,max_no_of_cells, max_tracers
   REAL, INTENT(IN)          :: velx(dsize_x,dsize_y), &
                                vely(dsize_x,dsize_y)
-  INTEGER, INTENT(IN)       :: count_tracer !,max_tracer_CP
+  INTEGER, INTENT(IN)       :: count_tracer 
   !INTEGER, INTENT(IN)       :: cp_field(dsize_x,dsize_y)
   INTEGER                   :: tracer_ts, it
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
   REAL                      :: vx_intp, vy_intp
   REAL                      :: ix, iy, ixt, iyt    !t are half level (interface)
   INTEGER                   :: start_time
@@ -1047,15 +1007,15 @@ END SUBROUTINE velocity_interpol
 !-----------------------------------------------------------------------------------
 SUBROUTINE update_newtracer(velx,vely,timestep,traced, count_tracer,max_no_of_cells,tracpo,max_tracers)
 !OCH TO DO: dt and resolution should be parameter read by USE from module
-USE cp_parameters, ONLY : dsize_x, dsize_y, res, max_tracer_CP, dt
+USE cp_parameters, ONLY : dsize_x, dsize_y, res, nTrSet, dt
 
   INTEGER, INTENT(IN)       :: timestep,max_no_of_cells, max_tracers
   REAL, INTENT(IN)          :: velx(dsize_x,dsize_y), &
                                vely(dsize_x,dsize_y)
-  INTEGER, INTENT(IN)       :: count_tracer !,max_tracer_CP
+  INTEGER, INTENT(IN)       :: count_tracer 
   !INTEGER, INTENT(IN)       :: cp_field(dsize_x,dsize_y)
   INTEGER                   :: tracer_ts, it
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
   REAL                      :: ix_new, iy_new, vx_intp, vy_intp
   REAL                      :: ix, iy, ixt, iyt    !t are half level (interface)
 !  INTEGER                   :: ix_round, iy_round, &
@@ -1151,16 +1111,16 @@ END SUBROUTINE update_newtracer
 SUBROUTINE update_tracer(velx,vely,timestep,traced, count_tracer,max_no_of_cells,tracpo,max_tracers, &
                          CPinfo)
 !OCH TO DO: dt and resolution should be parameter read by USE from module
-USE cp_parameters, ONLY : dsize_x, dsize_y, res, max_tracer_CP, max_age, dt
+USE cp_parameters, ONLY : dsize_x, dsize_y, res, nTrSet, max_age, dt
 
   INTEGER, INTENT(IN)       :: timestep,max_no_of_cells, max_tracers
   REAL, INTENT(IN)          :: velx(dsize_x,dsize_y), &
                                vely(dsize_x,dsize_y)
-  INTEGER, INTENT(IN)       :: count_tracer !,max_tracer_CP
+  INTEGER, INTENT(IN)       :: count_tracer 
   INTEGER, INTENT(INOUT)    :: CPinfo(max_no_of_cells,4)
   !INTEGER, INTENT(IN)       :: cp_field(dsize_x,dsize_y)
   INTEGER                   :: tracer_ts, it
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
   REAL                      :: ix_new, iy_new, vx_intp, vy_intp
   REAL                      :: ix, iy, ixt, iyt    !t are half level (interface)
 !  INTEGER                   :: ix_round, iy_round, &
@@ -1171,6 +1131,7 @@ USE cp_parameters, ONLY : dsize_x, dsize_y, res, max_tracer_CP, max_age, dt
   INTEGER                   :: sub_dt   ! subtimstepping
   sub_dt =dt/5  ! update 5 times within output timestep 60 ! update evry min
   it = 1 ! counter trough traced
+write(*,*) max_tracers
   DO WHILE (it .LT. count_tracer) ! count tracer are all tracers set until here
 !   IF (traced(tracpo(1,it),tracpo(2,it),11) .eq. 1) then
     ! determining the first time step of the event
@@ -1275,12 +1236,12 @@ END SUBROUTINE update_tracer
 ! CALCULATE ANGLE AND RADIUS FROM COG OF EACH TRACER 
 !-----------------------------------------------------------------------------------
 SUBROUTINE geometry(traced,COMx,COMy,already_tracked,max_no_of_cells)
-USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y, nTrSet 
 
   INTEGER, INTENT(IN)       :: max_no_of_cells
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
-  REAL                      :: DELTAx(max_no_of_cells,max_tracer_CP), &
-                               DELTAy(max_no_of_cells,max_tracer_CP), pi
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
+  REAL                      :: DELTAx(max_no_of_cells,nTrSet), &
+                               DELTAy(max_no_of_cells,nTrSet), pi
   INTEGER                   :: dx(max_no_of_cells), dy(max_no_of_cells) ! shift everything to have CP in thecenter
   INTEGER                   :: i,j
   INTEGER, INTENT(INOUT)    :: already_tracked(max_no_of_cells)
@@ -1292,7 +1253,7 @@ USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
   
   DO i = 1,max_no_of_cells ! loop trough every cp
 !   IF (already_tracked(i) .gt. 0) THEN ! do only sth if there are already tracerfor the CP
-    do j = 1,max_tracer_CP,1
+    do j = 1,nTrSet,1
     !DO j=1,already_tracked(i)
       ! shift to center
       traced(i,j,1) = mod(traced(i,j,1)+dx(i)-1+dsize_x,float(dsize_x))+1
@@ -1361,9 +1322,9 @@ END SUBROUTINE geometry
 ! Calculate radial velocities 
 !-----------------------------------------------------------------------------------
 SUBROUTINE radvel(traced, already_tracked,max_no_of_cells)
-USE cp_parameters, ONLY : max_tracer_CP
+USE cp_parameters, ONLY : nTrSet
   INTEGER, INTENT(IN)       :: max_no_of_cells
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
   REAL                      :: pi
   INTEGER                   :: i,j
   INTEGER, INTENT(INOUT)    :: already_tracked(max_no_of_cells)
@@ -1372,7 +1333,7 @@ USE cp_parameters, ONLY : max_tracer_CP
   DO i = 1,max_no_of_cells ! loop trough every cp
 !   IF (already_tracked(i) .gt. 0) THEN ! do only sth if there are already
 !   tracerfor the CP
-    do j = 1,max_tracer_CP,1
+    do j = 1,nTrSet,1
       traced(i,j,19)   = traced(i,j,13)*cos(traced(i,j,8)) + traced(i,j,14) * sin(traced(i,j,8))
       traced(i,j,20)   = traced(i,j,14)*cos(traced(i,j,8)) - traced(i,j,13) * sin(traced(i,j,8))
     END DO
@@ -1386,11 +1347,11 @@ END SUBROUTINE radvel
 !-----------------------------------------------------------------------------------
 ! not useable at the moment, programm changed too much
 SUBROUTINE radial_update(timestep,traced,count_tracer,max_no_of_cells,tracpo,max_tracers)
-USE cp_parameters, ONLY : dsize_x, dsize_y, res, dt, max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y, res, dt, nTrSet
   INTEGER, INTENT(IN)       :: timestep,max_no_of_cells, max_tracers
-  INTEGER, INTENT(IN)       :: count_tracer !,max_tracer_CP
+  INTEGER, INTENT(IN)       :: count_tracer 
   INTEGER                   :: tracer_ts, it
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells,nTrSet,20)
   REAL                      :: ix_new, iy_new, vx_intp, vy_intp
   REAL                      :: ix, iy    !t are half level (interface)
   INTEGER                   :: ix_new_round, iy_new_round, start_time
@@ -1470,15 +1431,15 @@ END SUBROUTINE sort
 ! output of tracer position in 2D nc field and calculation ov CP object
 !-----------------------------------------------------------------------------------
 SUBROUTINE setongrid(traced_dummy,map,map2,CPID,cogx,cogy,CPinfo,max_no_of_cells,tracked)
-USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y, nTrSet
   INTEGER,INTENT(INOUT) :: map(dsize_x, dsize_y),map2(dsize_x,dsize_y)
   INTEGER, INTENT(IN)   :: max_no_of_cells
   INTEGER, INTENT(IN)   :: tracked
   INTEGER,INTENT(IN)    :: cpinfo(max_no_of_cells)
   INTEGER               :: maptr(dsize_x, dsize_y),maptr2(dsize_x, dsize_y),maptr3(dsize_x, dsize_y)
   INTEGER, INTENT(IN)      ::  CPID
-  REAL, INTENT(IN) :: traced_dummy(max_tracer_CP,20)
-  REAL :: dum(max_tracer_CP,20), dumdum(max_tracer_CP,20)
+  REAL, INTENT(IN) :: traced_dummy(nTrSet,20)
+  REAL :: dum(nTrSet,20), dumdum(nTrSet,20)
   REAL, INTENT(IN) :: cogx, cogy
   INTEGER :: i,j,jsave
   INTEGER ::ii,ij, deltax,deltay, ix, iy,oldx,c,oldy,x,y,xtemp,ytemp
@@ -1515,7 +1476,7 @@ USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
 !  end do    
 
   rsave = 0.
-  DO i=1,tracked !max_tracer_CP
+  DO i=1,tracked 
        dumdum(c,:) = traced_dummy(i,:)  
        if (traced_dummy(i,5) .gt. rsave) then
          startc = c
@@ -1538,7 +1499,7 @@ USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
     firstx = oldx  ! gp to which gap is closed the first time
     firsty = oldy
 
-    DO WHILE (i .lt. c+1) !max_tracer_CP
+    DO WHILE (i .lt. c+1) 
       if (i .lt. savei) then 
         ! close circle and get out 
         x = mod(int(dum(i,3))-1+deltax+dsize_x,dsize_x)+1
@@ -1668,7 +1629,7 @@ END SUBROUTINE setongrid
 !------------------
 SUBROUTINE filltracer(startx, starty,x,y,maptr, maptr2,maptr3, CPID, &
                       centerx, centery, counter, checker)
-USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y
 
 INTEGER, INTENT(IN) :: startx, starty,x, y, CPID
 INTEGER, INTENT(INOUT) :: maptr(dsize_x, dsize_y), maptr2(dsize_x, dsize_y)
@@ -1722,7 +1683,7 @@ END SUBROUTINE filltracer
 ! at a given center
 !----------------------------------------------
 RECURSIVE SUBROUTINE getobj(objectin,CPID,objectout,ii,ij,c)
-USE cp_parameters, ONLY : dsize_x, dsize_y, max_tracer_CP
+USE cp_parameters, ONLY : dsize_x, dsize_y, nTrSet 
   INTEGER, INTENT(IN) :: objectin(dsize_x, dsize_y)
   INTEGER, INTENT(IN) :: CPID
   INTEGER, INTENT(IN) :: ii, ij
@@ -1780,9 +1741,9 @@ END SUBROUTINE getobj
 ! not used anymore
 SUBROUTINE oneside(tdummy,traced,tracked_no)
 
-USE  cp_parameters, ONLY :max_tracer_CP
+USE  cp_parameters, ONLY :nTrSet
   INTEGER, INTENT(IN)       :: tracked_no
-  REAL, INTENT(INOUT)       :: traced(max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced( nTrSet,20)
   REAL, INTENT(IN)          :: tdummy(tracked_no)
   INTEGER                   :: j
   REAL                      :: dif 
@@ -1820,11 +1781,11 @@ END SUBROUTINE oneside
 !-----------------------------------------------------------------------------------
 ! has never been used
 SUBROUTINE time_dev(traced,traced_prev,max_no_of_cells,count_tracer,tracpo,max_tracers)
-USE  cp_parameters, ONLY :max_tracer_CP
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells, max_tracer_CP,20)
-  REAL, INTENT(IN)          :: traced_prev(max_no_of_cells, max_tracer_CP,20)
+USE  cp_parameters, ONLY :nTrSet
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells, nTrSet,20)
+  REAL, INTENT(IN)          :: traced_prev(max_no_of_cells, nTrSet,20)
   INTEGER, INTENT(IN)       :: tracpo(2,max_tracers)
-  INTEGER, INTENT(IN)       :: max_no_of_cells, max_tracers,count_tracer !,max_tracer_CP
+  INTEGER, INTENT(IN)       :: max_no_of_cells, max_tracers,count_tracer 
   REAL                      :: v0, v1, dv
   INTEGER                   :: it 
   it =1
@@ -1849,15 +1810,15 @@ END SUBROUTINE
 !------------------
 SUBROUTINE write_output(traced,max_tracers,count_tracer,timestep,tracpo,&
                        max_no_of_cells,COMx,COMy,traced_prev1,sizeCP)
-USE  cp_parameters, ONLY :max_tracer_CP, dsize_x, dsize_y,odir !, max_age
+USE  cp_parameters, ONLY :nTrSet, dsize_x, dsize_y,odir !, max_age
 
   INTEGER, INTENT(IN)       :: count_tracer,max_tracers, timestep, &
-                               max_no_of_cells !, max_tracer_CP
+                               max_no_of_cells 
   INTEGER, INTENT(INOUT)    :: sizeCP(max_no_of_cells,max_age+1) 
   INTEGER                   :: it
   INTEGER,INTENT(IN)        :: tracpo(2,max_tracers)
-  REAL, INTENT(INOUT)       :: traced(max_no_of_cells, max_tracer_CP,20)
-  REAL, INTENT(INOUT)       :: traced_prev1(max_no_of_cells, max_tracer_CP,20)
+  REAL, INTENT(INOUT)       :: traced(max_no_of_cells, nTrSet,20)
+  REAL, INTENT(INOUT)       :: traced_prev1(max_no_of_cells, nTrSet,20)
   REAL, INTENT(IN)          :: COMx(max_no_of_cells), COMy(max_no_of_cells)
   INTEGER                   :: mapout(dsize_x, dsize_y)
   it=1
