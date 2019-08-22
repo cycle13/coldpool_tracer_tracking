@@ -261,9 +261,8 @@ write(*,*) 'read random '
 400 CONTINUE
 write(*,*) 'read data'
 OPEN(2,FILE=trim(odir) // '/output/raincell/irt_tracks_mask.srv',    FORM='unformatted', ACTION='read')
-OPEN(40,FILE=trim(odir) // '/output/cp/coldpool_tracer_out_all.txt',FORM='formatted', ACTION='write')
-OPEN(41,FILE=trim(odir) //'/output/cp/coldpool_tracer_out.txt',FORM='formatted', ACTION='write')
-!output form termination size of CP
+OPEN(40,FILE=trim(odir) // '/output/cp/coldpool_tracer_out.txt',FORM='formatted', ACTION='write')
+!output for termination size of CP
 OPEN(1706,FILE=trim(odir) //'/output/cp/termination.txt',FORM='formatted',ACTION='write')
 190 FORMAT (2(I8),  2X,F5.3 , 2X,F4.0 , 2X,I6)
 
@@ -305,8 +304,7 @@ prec_active(:,1) = 0
    prec_active(:,1) = 0 ! set all  rain cells inactive, only when read again
                         !they are still active
    timestep=timestep+1
-  write(*,*) 'at timestep', timestep
-   !if (IDstart(ID) .eq. 0) IDstart(ID) = cpio(ID,3) !new CP 
+   write(*,*) 'at timestep', timestep
    track_numbers(:,:)=0 
 
 ! read velocity files
@@ -316,6 +314,8 @@ prec_active(:,1) = 0
      READ (5,END=200) srv_header_input
      READ (5) vel(:,:,2)
    else if (trim(lformat) == 'nc') then
+     ! not neccessary to read nc files as long as no track is found (should be
+     ! changed)
      CALL read_nc_2D (vel(:,:,1),'U',trim(odir) // '/input/cp/input_u.nc',timestep)
      CALL read_nc_2D (vel(:,:,2),'V',trim(odir) // '/input/cp/input_v.nc',timestep)
      CALL read_nc_2D (track_numbers,'trackID',trim(odir) // '/output/raincell/irt_tracks_mask_fulltime.nc',timestep)
@@ -356,9 +356,8 @@ prec_active(:,1) = 0
       ! this routine might be rewriten that it can be called in set_tracer
        CALL set_tracer2(max_no_of_cells,cpio,traced,count_tracer,counter,CPsets,&
                         timestep,active_CP,tracpo,max_tracers,already_tracked,CPinfo)
-        CALL update_newtracer(vel(:,:,1),vel(:,:,2),timestep,traced,count_tracer,&
-                          max_no_of_cells,tracpo,max_tracers)
-
+       CALL update_newtracer(vel(:,:,1),vel(:,:,2),timestep,traced,count_tracer,&
+                        max_no_of_cells,tracpo,max_tracers)
 
        !CALL neigh(track_numbers,nneighb)
        !CALL set_tracer(nneighb, track_numbers,max_no_of_cells, timestep,traced,&
@@ -380,15 +379,13 @@ prec_active(:,1) = 0
              .and. cpio(i,1) .ne. cpio(i,2)) then ! its a merger
             traced(i,:,9) = cpio(i,2) ! switch tracer id to where they merge into 
          end if
+         ! if active
          IF (int(traced(i,1,11)) .eq. 1) then !already_tracked(i) .gt. 1 ) THEN
-!  !       ! reset dummy first
+           ! reset dummy first
            traced_dummy(:,:) = 0.
            traced_dummy = traced(i,:,:)
            ! sort tracer by angle 
            CALL sort(traced_dummy(1:already_tracked(i),:),already_tracked(i))
-  !!         if (traced(i,1,11)  .eq. 0) then !stop tracer only if precip has stoped
-  !           !CALL oneside(traced_dummy(1:already_tracked(i),8),traced(i,:,:),already_tracked(i))
-  !!         end if
            IF (traced(i,1,7) .lt. max_age) then
              ! tracer and objetcts on xy grid
              CALL setongrid(traced_dummy,map(:,:,1),map(:,:,2),int(traced(i,1,9)) &
@@ -1801,7 +1798,8 @@ USE  cp_parameters, ONLY :nTrSet
 END SUBROUTINE
 
 !------------------
-!
+! OUTPUT ROUTINE
+! output of ASCII file and nc file with CP object mask
 !------------------
 SUBROUTINE write_output(traced,max_tracers,count_tracer,timestep,tracpo,&
                        max_no_of_cells,COMx,COMy,traced_prev1,sizeCP)
@@ -1830,26 +1828,19 @@ USE  cp_parameters, ONLY :nTrSet, dsize_x, dsize_y,odir !, max_age
                 2(2X,I8))       ! precip ID
   mapout(:,:) = 0
   ! updating previous tracers
-write(*,*) 'write '
   DO WHILE (it .LT. count_tracer)
     IF (int(traced_prev1(tracpo(1,it),tracpo(2,it),11))  .eq. 1) THEN  !trace only if tracer is active
-      !IF(INT(trace9(tracpo(1,it),tracpo(2,it),7)) .le. max_age)then   ! output only up to  3hours
-!      IF (INT(traced_prev1(tracpo(1,it),tracpo(2,it),12)) .ne. 0) then
-!write(*,*) it
-!write(*,*) tracpo(1,it), tracpo(2,it)
-!write(*,*) tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))
-        
-        IF (sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))+1) &
+      IF (sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))+1) &
              .gt. 100000 ) then
-            IF (INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)) .gt. 1) then
-                sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))+1) = &
-                sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)))
-            ELSE
-              sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))+1) = 0
-            END IF
+        IF (INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)) .gt. 1) then
+          sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))+1) = &
+          sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)))
+        ELSE
+          sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7))+1) = 0
         END IF
-        mapout(INT(traced_prev1(tracpo(1,it),tracpo(2,it),3)),INT(traced_prev1(tracpo(1,it),tracpo(2,it),4))) = 1
-        WRITE(40,150) INT(timestep)-1,INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)),& !timestep, age
+      END IF
+      mapout(INT(traced_prev1(tracpo(1,it),tracpo(2,it),3)),INT(traced_prev1(tracpo(1,it),tracpo(2,it),4))) = 1
+      WRITE(40,150) INT(timestep)-1,INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)),& !timestep, age
                         it,INT(traced_prev1(tracpo(1,it),tracpo(2,it),12)),& !tracer and CP ID
                         traced_prev1(tracpo(1,it),tracpo(2,it),1),traced_prev1(tracpo(1,it),tracpo(2,it),2),& !pos 1-2
                         INT(traced_prev1(tracpo(1,it),tracpo(2,it),3)),INT(traced_prev1(tracpo(1,it),tracpo(2,it),4)),& !rounded
@@ -1859,22 +1850,6 @@ write(*,*) 'write '
                         COMx(tracpo(1,it)), COMy(tracpo(1,it))                                   ,& ! center
                         INT(traced_prev1(tracpo(1,it),tracpo(2,it),16)), INT(traced_prev1(tracpo(1,it),tracpo(2,it),9)),&   ! merger, prec ID
                         sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)+1))   !timesteps set after precip start
-        IF (INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)) .gt. INT(traced_prev1(tracpo(1,it),tracpo(2,it),18)) &
-           .or. INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)) .eq. 0 ) THEN
-          WRITE(41,150) INT(timestep)-1,INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)),&!timestep, age
-                        it,INT(traced_prev1(tracpo(1,it),tracpo(2,it),12)),& !tracerand CP ID
-                        traced_prev1(tracpo(1,it),tracpo(2,it),1),traced_prev1(tracpo(1,it),tracpo(2,it),2),&!pos 1-2
-                        INT(traced_prev1(tracpo(1,it),tracpo(2,it),3)),INT(traced_prev1(tracpo(1,it),tracpo(2,it),4)),&!rounded
-                        traced_prev1(tracpo(1,it),tracpo(2,it),5),traced_prev1(tracpo(1,it),tracpo(2,it),8),&!distance and angle
-                        traced_prev1(tracpo(1,it),tracpo(2,it),13),traced_prev1(tracpo(1,it),tracpo(2,it),14),&! u, v Wind component
-                        traced_prev1(tracpo(1,it),tracpo(2,it),15),traced_prev1(tracpo(1,it),tracpo(2,it),17),&! x and y distance  
-                        COMx(tracpo(1,it)), COMy(tracpo(1,it)) ,& ! center
-                        INT(traced_prev1(tracpo(1,it),tracpo(2,it),16)),INT(traced_prev1(tracpo(1,it),tracpo(2,it),9)),&   ! merger, prec ID
-                        sizeCP(tracpo(1,it),INT(traced_prev1(tracpo(1,it),tracpo(2,it),7)+1))  !INT(traced_prev1(tracpo(1,it),tracpo(2,it),18))   !timestepsset after precip start
-
-        END IF 
-!      END IF          
-    !   END IF
     END IF
     it = it+1
   END DO

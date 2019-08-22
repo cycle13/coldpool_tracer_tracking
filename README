@@ -1,0 +1,122 @@
+-------------------------------------
+-------------------------------------
+Content:
+-------------------------------------
+- src (dir containing source fortran code)
+  - raincell (contains code for IRT see Moseley2016,2019)
+    - ... 
+  - cp (contains fortran source code for cold pool tracking)
+    - cp_parameters.f90 (module containing paramters)
+    - tracer_tracking.f90 (main code for CP tracking)
+
+- bin (executable and binary files)
+  - raincell
+    - ...
+  - cp
+    - tracer_tracking.x
+    - cp_parameters.o
+    - cp_parameters.mod
+  - fill_tracks.ncl (fills missing timesteps in raincelltracking)
+  - merger.py (determines when CP starts after precip track start)
+  - cut.bsh (postprocessing for raincell ASCII files)
+
+- job (create trackiong jobs)
+  - run_raintrack.job (conducts the tracking job)
+  - namelist.tmp (template for the namelist.dat)
+  - namelist.dat (produced by run_raintrack.job)
+
+- compile.job (compiles the sourcecode from IRT and CP)
+
+-------------------------------------------------------------
+-------------------------------------
+Compilation:
+-------------------------------------
+compile.job rc   compiles the IRT from src/raincell/*
+compile.job cp   compiles the CP tracking from src/cp/*
+
+------------------------------------------------------------
+-------------------------------------
+Required data:
+-------------------------------------
+- 2D precipitation field or similiar  2D field for cell tracking
+  (see IRT for details)
+- 2D-field of horizontal wind components for tracer advection
+  (all timesteps in onw file, input_u.srv, input_v.srv)
+- So far the CP tracking only handles circular boundary conditions 
+
+-------------------------------------------------------------
+-------------------------------------
+Run:
+-------------------------------------
+Preparation: Precipitation and wind data must be in the right format. Divergence
+must be calculated from horizontal wind field
+
+Making directory strcuture, preparing and running the IRT and preparing
+and running the CP tracking can all be made with the run-script 
+run_raintrack.job in job directory. 
+Required input: 
+  general: 
+  - path for input data
+  - domainsize of modeldata
+  - define jobname
+  - path where output shell be stored
+
+  IRT: 
+  - threshold for object identification
+  - min cell size
+ 
+  CP tracking:
+  - number of tracer per CP
+  - maximum age of CPs
+  -   
+------------------------------------------------------------
+-------------------------------------
+Programs:
+-------------------------------------
+
+.........................
+tracer_tracking.x
+........................
+  - creates random numbers of domainsize: selects every gridpoint once in 
+    random order, output as x/y saved as randomgrdpts_xysize. Time consuming
+    function. When tracking is done multiple times for randomgrdpts_xysize 
+    can be read instead of vreating random order again. 
+  - opens files: 
+    input
+    - mergingCPs.txt (gives when to start CP after precip start,
+      0 when precip track starts as a merger 
+    - irt_tracks_mask.srv (get position of precip tracks)
+    - input_u.srv + input_v.srv (wind field for advection)
+
+    output
+    - termination.txt (Size of CP before they terminate)
+  - loops trough all timesteps and opens required files (wind velocity, 
+    precipitation track, COGs, ...) 
+  - fnc neigh2: selects outer grid cells of precipitation track object,
+    stores selected grid points in random order (not more than tracers to
+    be placed) 
+  - fnc set_tracer2: places tracer, stores it in traced(internal tracer ID,
+    CP ID, information) infomormation can be position (x/y), age, etc. 
+  - fnc update_newtracer: advects newly set tracer only 
+  - fnc velocity_interpol: interpolates velocity field from staggered grid 
+    to tracer positions (stored in traced(:,:,13:14)
+  - fnc geometry: calculates radial coordinates of tracer position relative
+    to its COG
+  - fnc radvel: calculates radial velocity component of tracer  
+  - fnc sort: sorts tracer by its angle (radial coordinates)
+  - fnc setongrid: stores tracer on x times y grid and get objects
+      - fnc filltracer: identifies outlines of cold pools by connecting 
+        tracer and by filling up gridpoints between tracers
+      - fnc getobj: fill outlines of CP to get CP objects
+  - retrieve size of CP from objects and sum up size
+    for merging CPs. (needed to determine termination)
+  - fnc write_output
+  - terminate CP: terminate CPs that reduce too drastically in size
+  - fnc update_tracer: update tracer position by advection and overwrite 
+    varible tarced where all information are saved
+
+.........................
+tracer_tracking.x
+........................
+
+
