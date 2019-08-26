@@ -5,41 +5,58 @@
 ##########################
 # SET PATH
 #
-from='test1plus4K_fin11'  # only if rain tracking not running because tracer use the same as already traced
-JOBNAME='test1plus4K_neut' #fin12' #multismall'  #name shouldnt be too long, improve f90 
-FIN=$modelo/UCLA_testdata/test1plus4K/level2/test1plus4K_budget.nc # inputfile for precipitation
-INv=/$modelo/UCLA_testdata/test1plus4K/level1/test1plus4K.out.vol.v.nc
-INu=$modelo/UCLA_testdata/test1plus4K/level1/test1plus4K.out.vol.u.nc
-domsizex=320 #  #todo: needs to be changed as input in rain tracking
-domsizey=320 #
+#from='test1plus4K_fin11'  # only if rain tracking not running because tracer use the same as already traced
+#JOBNAME='test1plus4K_neut' #fin12' #multismall'  #name shouldnt be too long, improve f90 
+#FIN=$modelo/UCLA_testdata/test1plus4K/level2/test1plus4K_budget.nc # inputfile for precipitation
+#INv=/$modelo/UCLA_testdata/test1plus4K/level1/test1plus4K.out.vol.v.nc
+#INu=$modelo/UCLA_testdata/test1plus4K/level1/test1plus4K.out.vol.u.nc
+#domsizex=320 #  #todo: needs to be changed as input in rain tracking
+#domsizey=320 #
 
 
-#from='lindp2K_13' #'test1plus4K'
-#JOBNAME='lindp2K_500tr_lvl2' #lindp2K_500tr' #'test1plus4K_neworder' 
+#from='lind_adv_500tr' #indp2K_500tr_lvl3' #'test1plus4K'
+#JOBNAME='lind_adv_test' #lindp2K_500tr_neuconv1' 
+#FIN=$modelo2/UCLA_lind/p2K_large/lind_p2K_budget_pure_conv.nc
+#INv=$modelo2/UCLA_lind/p2K_large/lind_p2K.out.vol.v.nc
+#INu=$modelo2/UCLA_lind/p2K_large/lind_p2K.out.vol.u.nc
+
 #FIN=/nbi/ac/conv1/henneb/Moseley2018/data/lind_p2K/lind_p2K_intensity.nc  
 #INv=/nbi/ac/conv1/henneb/Moseley2018/data/lind_p2K/lind_p2K.out.vol.v.nc
 #INu=/nbi/ac/conv1/henneb/Moseley2018/data/lind_p2K/lind_p2K.out.vol.u.nc
 #domsizex=1024 #320 #  #todo: needs to be changed as input in rain tracking
 #domsizey=1024 #320 #
 
+from='lind_adv_500tr'
+JOBNAME='testAug19_02'
+FIN=$modelo2/UCLA_lind/lind_adv_shear/lind_adv_shear_budget_conv.nc  
+INv=$modelo2/UCLA_lind/lind_adv_shear/lind_adv_shear.out.vol.v.nc
+INu=$modelo2/UCLA_lind/lind_adv_shear/lind_adv_shear.out.vol.u.nc
+domsizex=960
+domsizey=960
+lvl=1
+
 OUT=/nbi/ac/conv1/henneb/results/coldpool/${JOBNAME}/
 
 ## SET PARAMETER
 cutoff=1.0                        # cut off for precip (mm/s)
 mincellsize=10.                              # minimum rain cell size, use 3 strings
-trackstartsize=30.                           # minimum size when trac starts
-mintracersize=50.                            # minimum size for tracer tracking 
 dt=300
 res=200
-tracer=50 #500 # 120 #100
-ntsets=0                                          # number of timesteps at which tracers are set after precip start
-alltracer=50 #500 #(nsets +1) *tracer #600 # `expr ${ntracer} * ${ntsets}`
+tracer=500 #500 # 120 #100
 
-# alltracer=$((ntracer * ntsets))
-age=20 # 50
-rad=True
+age=50 # 50
 lformat=srv #nc #srv
-lirt="bl" #"run" #copy" #"run" # "run" #"run" #'copy' 
+lirt="run" #"copy" #"run" #"link" #"copy" # "run" #"run" #'copy' 
+
+############################
+### DIRECTORY STRUCTURE
+#############################
+mkdir -p ${OUT}/output/cp/
+mkdir -p ${OUT}/output/raincell
+mkdir -p ${OUT}/input/cp/
+mkdir -p ${OUT}/input/raincell
+mkdir -p ${OUT}/job
+
 #########################
 ### MAKE NAMELIST 
 ########################
@@ -53,23 +70,13 @@ lirt="bl" #"run" #copy" #"run" # "run" #"run" #'copy'
         -e s%@{OUT}%${OUT}%g \
         -e s%@{tracer}%${tracer}%g \
         -e s%@{age}%${age}%g \
-        -e s%@{radv}%${radv}%g\
-        -e s%@{ntset}%${ntsets}%g\
-        -e s%@{alltracer}%${alltracer}%g\
         -e s%@{lformat}%${lformat}%g\
-       <namelist.tmp>namelist.dat
-
-cp namelist.dat ${OUT}/.
+       <namelist.tmp>${OUT}/job/namelist.dat
 cd ..
-#
-############################
-### DIRECTORY STRUCTURE
-#############################
-mkdir -p ${OUT}/output/cp/
-mkdir -p ${OUT}/output/raincell
-mkdir -p ${OUT}/input/cp/
-mkdir -p ${OUT}/input/raincell
-
+startdir=$(pwd)
+#echo $startdir
+echo 'made directory structure ' $JOBNAME
+cd ${OUT} 
 #############################
 ##### JOB OUTPUT 
 ############################
@@ -84,31 +91,34 @@ if [ $lirt == "run" ]; then
 ##if [ ! -f ${OUT}/input/irt_objects_input_00.srv ]; then
 # cdo -f srv selvar,r_int $FIN ${OUT}/input/raincell/irt_objects_input_00.srv
 ##fi
- cdo -f srv selvar,r_int $FIN ${OUT}/input/raincell/irt_objects_input_00.srv
+ cdo -f srv selvar,r_int $FIN ${OUT}/input/raincell/irt_objects_input_00.srv &
+# because srv does not work with the data for whatever reason
+# cp /nbi/ac/cond4/rawdata/UCLA_lind/lind_adv_shear/lind_adv_shear_intensity.srv ${OUT}/input/raincell/irt_objects_input_00.srv
  cdo -f srv selvar,conv_h_sfc $FIN ${OUT}/input/raincell/irt_objects_input_01.srv
 
 #
 #####################################################
 ### run_tracking
-#####################################################
-  ./bin/raincell/irt_objects_release.x 1
-  ./bin/raincell/irt_advection_field_release.x
-  ./bin/raincell/irt_tracks_release.x
+####################################################
+  ${startdir}/bin/raincell/irt_objects_release.x 1
+  ${startdir}/bin/raincell/irt_advection_field_release.x
+  ${startdir}/bin/raincell/irt_tracks_release.x
   sort -n -k2 ${OUT}/output/raincell/irt_tracks_nohead_output.txt > ${OUT}/output/raincell/irt_tracks_sorted.txt
-  ./bin/raincell/irt_trackmask_release.x
+  ${startdir}/bin/raincell/irt_trackmask_release.x
 
   cdo -f nc copy ${OUT}/output/raincell/irt_objects_mask.srv ${OUT}/output/raincell/irt_objects_mask.nc
   cdo -f nc copy ${OUT}/output/raincell/irt_tracks_mask.srv ${OUT}/output/raincell/irt_tracks_mask.nc
-  ncl path=\"${OUT}/output/raincell/\" bin/fill_tracks.ncl
+  ncl path=\"${OUT}/output/raincell/\" ${startdir}/bin/fill_tracks.ncl
 
 ###################################################
 # prepare input for cold pool tracking 
 ##################################################
 #
-  ./bin/cut.bsh ${OUT} # cuts the header and body to separate files
+  ${startdir}/bin/cut.bsh ${OUT} # cuts the header and body to separate files
   sort -n -k2 ${OUT}/output/raincell/headerfile.txt > ${OUT}/input/cp/irt_tracks_header_sorted.txt
   sort -n -k2 ${OUT}/output/raincell/irt_tracks_output_pure.txt > ${OUT}/output/raincell/irt_tracks_output_pure_sort.txt
-
+  sort -n -k2 ${OUT}/output/raincell/irt_tracks_output_pure.txt > ${OUT}/input/cp/tracks_body_time_sorted.txt
+echo 'run raintrackig ' $JOBNAME 
 fi 
 # now with srv cdo sellevel,50 ${INv} input/cp/input_v.nc
 # now with srv cdo sellevel,50 ${INu} input/cp/input_u.nc
@@ -127,24 +137,47 @@ fi
 ####################################################
 ## or copy from another experiment with same simulation
 ###################################################
+python ${startdir}/bin/merger.py $JOBNAME
+echo 'python bin/merger.py' $JOBNAME
+sort -n -k2 ${OUT}/output/raincell/irt_tracks_output_pure.txt > ${OUT}/input/cp/tracks_body_time_sorted.txt
+
+
 if [ $lirt == "copy" ]; then
   rsync -r $OUT/../${from}/output/raincell $OUT/output/.
   rsync -r $OUT/../${from}/input/raincell $OUT/output/.
   rsync -r $OUT/../${from}/input/cp $OUT/input/.
+  cp $OUT/../${from}/randomgrdpts_${domsizex} $OUT/.
+echo 'copied data ' $JOBNAME
 fi 
+if [ $lirt == "link" ]; then
+  rm -r $OUT/output/raincell
+  rm -r $OUT/input/raincell
+  #rm -r $OUT/input/cp
 
-cdo -f srv sellevel,50 ${INv} ${OUT}/input/cp/input_v.srv
-cdo -f srv sellevel,50 ${INu} ${OUT}/input/cp/input_u.srv
+  ln -s $OUT/../${from}/output/raincell $OUT/output/.
+  ln -s $OUT/../${from}/input/raincell $OUT/input/.
+  ln -s $OUT/../${from}/input/cp/mergingCPs.txt $OUT/input/cp/.
+  ln -s $OUT/../${from}/input/cp/na.txt $OUT/input/cp/.
+  ln -s $OUT/../${from}/input/cp/irt_tracks_header_sorted.txt $OUT/input/cp/.
+  ln -s $OUT/../${from}/input/cp/tracks_body_time_sorted.txt $OUT/input/cp/.
 
-python bin/merger.py $JOBNAME 
-echo 'python bin/merger.py' $JOBNAME
-#ncl path=\"${OUT}\" tr=${trackstartsize} tr2=${mintracersize} dx=${domsizex} dy=${domsizey} bin/merger.ncl #makes list of merging cold pools for special treatment
+echo 'linked data ' $JOBNAME
+fi
+
+  cp $OUT/../${from}/randomgrdpts_${domsizex} $OUT/.
+
+#cdo -f srv sellevel,950 ${INv} ${OUT}/input/cp/input_v.srv
+#cdo -f srv sellevel,950 ${INu} ${OUT}/input/cp/input_u.srv
+
+cdo -f srv sellevidx,$lvl ${INv} ${OUT}/input/cp/input_v.srv &
+cdo -f srv sellevidx,$lvl ${INu} ${OUT}/input/cp/input_u.srv
+echo 'selected level'
 #cp ${OUT}/../${from}/input/cp/mergingCPs.txt ${OUT}/input/cp/mergingCPs.txt 
-sort -n -k2 ${OUT}/output/raincell/irt_tracks_output_pure.txt > ${OUT}/input/cp/tracks_body_time_sorted.txt
 #cp /nbi/ac/conv1/henneb/results/coldpool/test1plus4K_finneu1/input/cp/mergingCPs.txt ${OUT}/input/cp/.
 ##
 ##
-./bin/cp/tracer_tracking.x
+${startdir}/bin/cp/tracer_tracking.x
+echo $JOBNAME
 #
 ########################
 ## CLEANING

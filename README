@@ -33,6 +33,7 @@ Compilation:
 -------------------------------------
 compile.job rc   compiles the IRT from src/raincell/*
 compile.job cp   compiles the CP tracking from src/cp/*
+compile.job rcnc compiles the IRT version which can handle netcdf 
 
 ------------------------------------------------------------
 -------------------------------------
@@ -41,39 +42,93 @@ Required data:
 - 2D precipitation field or similiar  2D field for cell tracking
   (see IRT for details)
 - 2D-field of horizontal wind components for tracer advection
-  (all timesteps in onw file, input_u.srv, input_v.srv)
+  (all timesteps in one file, input_u.srv, input_v.srv)
 - So far the CP tracking only handles circular boundary conditions 
 
 -------------------------------------------------------------
 -------------------------------------
 Run:
 -------------------------------------
-Preparation: Precipitation and wind data must be in the right format. Divergence
-must be calculated from horizontal wind field
+Preparation: Precipitation and wind data must be in the right format. 
+See Required data
+2D Divergence must be calculated from horizontal wind field
+
+Use run script job/run_raintrack.job:
 
 Making directory strcuture, preparing and running the IRT and preparing
 and running the CP tracking can all be made with the run-script 
 run_raintrack.job in job directory. 
 Required input: 
+
+  for namelist files:
   general: 
-  - path for input data
-  - domainsize of modeldata
-  - define jobname
-  - path where output shell be stored
+  - OUT                          path where output shell be stored
+  - domsizex                     domainsize of modeldata      
+  - domsizey
+  - dt                           temporal resolution of model output data
+  - res                          horizontal res. ...
 
   IRT: 
-  - threshold for object identification
-  - min cell size
+  - cutoff                       threshold for object identification
+  - mincellsize                  min cell size
  
   CP tracking:
-  - number of tracer per CP
-  - maximum age of CPs
-  -   
+  - tracer                       number of tracer per CP
+  - age                          maximum age of CPs
+  - lformat                      srv or nc format of input data. nc requires separate compiliation 
+                                 IRT for nc with ./compile rcnc
+
+  for data preparation and directory structure:
+  - FIN                          path for input data (divergence, precitation)
+  - INv                          path for wind input data
+  - INu
+  - JOBNAME                      define jobname
+  - lvl                          model level of wind data, if more than one level
+                                 is present. lowest level should be chosen if no
+                                 other purpose of tracking
+  - lirt                         define tasks of the job "run" does the full job
+
 ------------------------------------------------------------
 -------------------------------------
 Programs:
+Preparation from raincell to CP
 -------------------------------------
+.........................
+cut.bsh
+........................
+prepares the ASCII output from raincell tracking for CP tracking
+separates header from body
 
+.........................
+fill_tracks.ncl
+........................
+netcdf mask file for precip. tracks contains timesteps only when precipitation 
+objects are present. fill_tracks.ncl adds missing timesteps with default value 0
+
+.........................
+merger.py
+.........................
+identifies 
+-spliting events,
+-time when to start CP, 
+-merger and  following track ID of the smaller part of the merger
+therefore IRT ASCII-files are read, CPs are started when average divergence 
+value of rain track object exceeds a given threshold. 
+Average divergence and ID of following object are stored in Objects file.
+information if merger or splitter is given in headerfile.txt
+attribution of objects Id to track ID is given in body of track file
+ASCII output:
+track ID, track ID merger, time when tarck starts, time when tracers to be placed 
+
+track ID merger: either same as track ID for events starting and terminating without
+spliting or merging; 0 starting as spliting, everything marked with 0 is ignored by
+CP tracking; 0 when divergence threshold is never exceeded in this track; number of
+larger track this track merges into. 
+
+-------------------------------------
+Programs:
+CP Tracking
+-------------------------------------
 .........................
 tracer_tracking.x
 ........................
@@ -116,7 +171,12 @@ tracer_tracking.x
     varible tarced where all information are saved
 
 .........................
-tracer_tracking.x
+cut.bsh
 ........................
+prepares the ASCII output from raincell tracking for CP tracking
+separates header from body
 
+.........................
+fill
+........................
 

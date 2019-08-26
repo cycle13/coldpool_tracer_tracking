@@ -40,7 +40,7 @@ for line in lines:
   dur[ID] =  durat
   trackStart[ID] = int(columns[1])
 
-# READ TRACK FILE AND GET TERMINATING OBJ ID
+# READ OBJECT FILE AND GET OBJECT ID for next timestep
 f = open(DIR+EXPID+'/output/raincell/irt_objects_output.txt', 'r')
 lines = f.readlines()
 f.close()
